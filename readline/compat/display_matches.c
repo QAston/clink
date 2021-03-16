@@ -1064,19 +1064,6 @@ void display_matches(char** matches)
                 if (max_description < (*walk)->visible_description)
                     max_description = (*walk)->visible_description;
             }
-            /*
-            // Handle simple case first.  What if there is only one answer?
-            //if (len == 1)
-            {
-                temp = printable_part(filtered_matches[1]->match);
-                rl_crlf();
-                reset_tmpbuf();
-                append_filename(temp, filtered_matches[1]->match, 0);
-                fwrite(tmpbuf_allocated, tmpbuf_length, 1, rl_outstream);
-                rl_crlf();
-
-                goto done_filtered;
-            }*/
 
             max = max_display;
             if (max_description)
