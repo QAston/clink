@@ -758,6 +758,101 @@ static char** alternative_matches(const char* text, int start, int end)
     return matches;
 }
 
+// copied from complete.c
+static char*
+printable_part(char* pathname)
+{
+    char* temp, * x;
+
+    /* begin_clink_change */
+    if (rl_completion_matches_include_type)
+    {
+        if (rl_filename_display_desired == 0)
+            return (pathname + 1);			/* don't need to do anything */
+        pathname++;
+    }
+    else
+        //if (rl_filename_completion_desired == 0)	/* don't need to do anything */
+        if (rl_filename_display_desired == 0)	/* don't need to do anything */
+      /* end_clink_change */
+            return (pathname);
+
+    temp = rl_last_path_separator(pathname);
+#if defined (__MSDOS__) || defined (_WIN32)
+    if (temp == 0 && ISALPHA((unsigned char)pathname[0]) && pathname[1] == ':')
+        temp = pathname + 1;
+#endif
+
+    if (temp == 0 || *temp == '\0')
+        return (pathname);
+    else if (temp[1] == 0 && temp == pathname)
+        return (pathname);
+    /* If the basename is NULL, we might have a pathname like '/usr/src/'.
+       Look for a previous slash and, if one is found, return the portion
+       following that slash.  If there's no previous slash, just return the
+       pathname we were passed. */
+    else if (temp[1] == '\0')
+    {
+        for (x = temp - 1; x > pathname; x--)
+            if (rl_is_path_separator(*x))
+                break;
+        return (rl_is_path_separator(*x) ? x + 1 : pathname);
+    }
+    else
+        return ++temp;
+}
+
+
+// return values are ignored
+static int clink_postprocess_matches(char** matches)
+{
+    if (matches == 0)
+        return 0;
+
+    match_display_filter_entry** filtered_matches = nullptr;
+    if (!s_matches->match_display_filter(matches, &filtered_matches, false))
+        return 0;
+
+    int nmatch;
+    for (nmatch = 1; matches[nmatch]; nmatch++) {
+        bool found = false;
+        // assume very few matches (usually one)
+        for (match_display_filter_entry** walk = filtered_matches + 1; *walk; walk++)
+        {
+            char* c = printable_part(matches[nmatch]);
+            if (strcmp((*walk)->match, c) == 0) {
+                found = true;
+                break;
+            }
+            if (!found) {
+                FREE(matches[nmatch]);
+                matches[nmatch] = nullptr;
+            }
+
+        }
+    }
+    for (int i = 1; i < nmatch; i++) {
+        if (matches[i]) {
+            continue;
+        }
+        for (int j = i + 1; ; ++j) {
+            if (j >= nmatch) {
+                break;
+            }
+            if (!matches[j]) {
+                continue;
+            }
+            matches[i] = matches[j];
+            matches[j] = nullptr;
+        }
+    }
+
+    free_filtered_matches(filtered_matches);
+
+
+    return 0;
+}
+
 //------------------------------------------------------------------------------
 struct match_hasher
 {
@@ -783,8 +878,10 @@ static match_display_filter_entry** match_display_filter(char** matches, bool po
         return nullptr;
 
     match_display_filter_entry** filtered_matches = nullptr;
-    if (!s_matches->match_display_filter(matches, &filtered_matches, popup))
-        return nullptr;
+    
+    // disable display filters because we're using them for match filtering
+    //if (!s_matches->match_display_filter(matches, &filtered_matches, popup))
+    return nullptr;
 
     // Remove duplicates.
     if (filtered_matches[0] && filtered_matches[1])
@@ -1211,7 +1308,7 @@ rl_module::rl_module(const char* shell_name, terminal_in* input)
 
     // Completion and match display.
     // TODO: postprocess_matches is for better quote handling.
-    //rl_ignore_some_completions_function = postprocess_matches;
+    rl_ignore_some_completions_function = clink_postprocess_matches;
     rl_attempted_completion_function = alternative_matches;
     rl_menu_completion_entry_function = filename_menu_completion_function;
     rl_adjust_completion_word = adjust_completion_word;
